@@ -1,4 +1,4 @@
-name: Flutter Build APK
+name: Flutter Project Auto Build APK
 
 on:
   push:
@@ -23,13 +23,33 @@ jobs:
       with:
         channel: 'stable'
 
-    - name: Install dependencies
+    - name: Repair and Force Project Structure
+      run: |
+        # আমাদের দেওয়া ফাইলগুলো সাময়িক ব্যাকআপ রাখা
+        mkdir -p temp_source
+        cp pubspec.yaml temp_source/ 2>/dev/null || true
+        cp lib/main.dart temp_source/ 2>/dev/null || true
+        
+        # গিটহাব রানারের ডিরেক্টরি সম্পূর্ণ ফ্রেশ করা
+        rm -rf * .github
+        
+        # একটি সম্পূর্ণ অফিশিয়াল ফ্ল্যাটার প্রোজেক্ট তৈরি করা
+        flutter create --org com.rafi.tokensolution --project-name prepaid_meter_token_solution .
+        
+        # ব্যাকআপ থেকে আমাদের মেইন সোর্স কোডগুলো প্রোজেক্টে পুশ করা
+        cp temp_source/pubspec.yaml .
+        cp temp_source/main.dart lib/main.dart
+        
+        # অ্যান্ড্রয়েডের জন্য মিনিমাম SDK সংস্করণ ২১ এ উন্নীত করা (ক্যামেরা প্লাগইনের জন্য জরুরি)
+        sed -i 's/minSdkVersion .*/minSdkVersion 21/' android/app/build.gradle
+
+    - name: Get Flutter Packages
       run: flutter pub get
 
-    - name: Build APK
-      run: flutter build apk --release --no-pub
+    - name: Build Release APK
+      run: flutter build apk --release
 
-    - name: Upload APK
+    - name: Upload Artifact APK
       uses: actions/upload-artifact@v4
       with:
         name: Token-Scanner-APK
