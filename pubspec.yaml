@@ -1,20 +1,16 @@
 name: prepaid_meter_token_solution
-description: "A new Flutter project for scanning and formatting tokens."
+description: "Prepaid Meter Token Solution"
 publish_to: 'none'
 version: 1.0.0+1
-
 environment:
   sdk: '>=3.0.0 <4.0.0'
-
 dependencies:
   flutter:
     sdk: flutter
   image_picker: ^1.1.2
   google_mlkit_text_recognition: ^0.13.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
 flutter:
   uses-material-design: true
