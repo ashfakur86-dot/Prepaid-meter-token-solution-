@@ -23,31 +23,33 @@ jobs:
       with:
         channel: 'stable'
 
-    - name: Repair and Force Project Structure
+    - name: Clean & Reconstruct Perfect Flutter Project
       run: |
-        # আমাদের দেওয়া ফাইলগুলো সাময়িক ব্যাকআপ রাখা
+        # আমাদের দেওয়া মেইন ফাইলগুলো ব্যাকআপ রাখা
         mkdir -p temp_source
         cp pubspec.yaml temp_source/ 2>/dev/null || true
         cp lib/main.dart temp_source/ 2>/dev/null || true
         
-        # গিটহাব রানারের ডিরেক্টরি সম্পূর্ণ ফ্রেশ করা
+        # গিটহাব রানারের ডিরেক্টরি সম্পূর্ণ ফাঁকা করা
         rm -rf * .github
         
-        # একটি সম্পূর্ণ অফিশিয়াল ফ্ল্যাটার প্রোজেক্ট তৈরি করা
+        # লেটেস্ট অফিশিয়াল ফ্ল্যাটার প্রোজেক্ট স্ক্র্যাচ থেকে তৈরি করা
         flutter create --org com.rafi.tokensolution --project-name prepaid_meter_token_solution .
         
-        # ব্যাকআপ থেকে আমাদের মেইন সোর্স কোডগুলো প্রোজেক্টে পুশ করা
+        # ব্যাকআপ থেকে আমাদের মেইন সোর্স কোডগুলো রিপ্লেস করা
         cp temp_source/pubspec.yaml .
+        rm -rf lib
+        mkdir -p lib
         cp temp_source/main.dart lib/main.dart
         
-        # অ্যান্ড্রয়েডের জন্য মিনিমাম SDK সংস্করণ ২১ এ উন্নীত করা (ক্যামেরা প্লাগইনের জন্য জরুরি)
+        # ক্যামেরা ও টেক্সট রিকগনিশন প্লাগইনের জন্য মিনিমাম SDK সংস্করণ বাড়িয়ে ২১ করা
         sed -i 's/minSdkVersion .*/minSdkVersion 21/' android/app/build.gradle
 
-    - name: Get Flutter Packages
+    - name: Get Packages
       run: flutter pub get
 
     - name: Build Release APK
-      run: flutter build apk --release
+      run: flutter build apk --release --no-pub
 
     - name: Upload Artifact APK
       uses: actions/upload-artifact@v4
