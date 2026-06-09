@@ -1,4 +1,4 @@
-name: Flutter Project Auto Build APK
+name: Flutter Auto Project and Build APK
 
 on:
   push:
@@ -23,35 +23,174 @@ jobs:
       with:
         channel: 'stable'
 
-    - name: Clean & Reconstruct Perfect Flutter Project
+    - name: Create Fresh Flutter Project & Inject Code
       run: |
-        # আমাদের দেওয়া মেইন ফাইলগুলো ব্যাকআপ রাখা
-        mkdir -p temp_source
-        cp pubspec.yaml temp_source/ 2>/dev/null || true
-        cp lib/main.dart temp_source/ 2>/dev/null || true
-        
-        # গিটহাব রানারের ডিরেক্টরি সম্পূর্ণ ফাঁকা করা
+        # ফ্রেশ প্রোজেক্ট তৈরি করা
         rm -rf * .github
-        
-        # লেটেস্ট অফিশিয়াল ফ্ল্যাটার প্রোজেক্ট স্ক্র্যাচ থেকে তৈরি করা
         flutter create --org com.rafi.tokensolution --project-name prepaid_meter_token_solution .
         
-        # ব্যাকআপ থেকে আমাদের মেইন সোর্স কোডগুলো রিপ্লেস করা
-        cp temp_source/pubspec.yaml .
-        rm -rf lib
-        mkdir -p lib
-        cp temp_source/main.dart lib/main.dart
+        # ১. কাস্টম pubspec.yaml তৈরি
+        cat << 'EOF' > pubspec.yaml
+        name: prepaid_meter_token_solution
+        description: "A new Flutter project for scanning and formatting tokens."
+        publish_to: 'none'
+        version: 1.0.0+1
+        environment:
+          sdk: '>=3.0.0 <4.0.0'
+        dependencies:
+          flutter:
+            sdk: flutter
+          image_picker: ^1.1.2
+          google_mlkit_text_recognition: ^0.13.0
+        dev_dependencies:
+          flutter_test:
+            sdk: flutter
+        flutter:
+          uses-material-design: true
+        EOF
         
-        # ক্যামেরা ও টেক্সট রিকগনিশন প্লাগইনের জন্য মিনিমাম SDK সংস্করণ বাড়িয়ে ২১ করা
+        # ২. আপনার নতুন কালার চেঞ্জ এবং এন্টার বাটন লজিকসহ main.dart তৈরি
+        cat << 'EOF' > lib/main.dart
+        import 'package:flutter/material.dart';
+        import 'package:flutter/services.dart';
+        import 'package:image_picker/image_picker.dart';
+        import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+
+        void main() {
+          runApp(const MyApp());
+        }
+
+        class MyApp extends StatelessWidget {
+          const MyApp({super.key});
+          @override
+          Widget build(BuildContext context) {
+            return MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: ThemeData(primarySwatch: Colors.blue),
+              home: const NumberScannerScreen(),
+            );
+          }
+        }
+
+        class NumberScannerScreen extends StatefulWidget {
+          const NumberScannerScreen({super.key});
+          @override
+          State<NumberScannerScreen> createState() => _NumberScannerScreenState();
+        }
+
+        class TokenModel {
+          final String text;
+          bool isEntered;
+          TokenModel({required this.text, this.isEntered = false});
+        }
+
+        class _NumberScannerScreenState extends State<NumberScannerScreen> {
+          List<TokenModel> _tokenList = [];
+          bool _isLoading = false;
+          final ImagePicker _picker = ImagePicker();
+
+          Future<void> _processImage(ImageSource source) async {
+            final XFile? image = await _picker.pickImage(source: source);
+            if (image == null) return;
+            setState(() { _isLoading = true; _tokenList = []; });
+            try {
+              final inputImage = InputImage.fromFilePath(image.path);
+              final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+              final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
+              String allNumbers = recognizedText.text.replaceAll(RegExp(r'[^0-9]'), '');
+              List<TokenModel> tempTokens = [];
+              for (int i = 0; i < allNumbers.length; i += 20) {
+                int end = (i + 20 < allNumbers.length) ? i + 20 : allNumbers.length;
+                String rawToken = allNumbers.substring(i, end);
+                StringBuffer formatted = StringBuffer();
+                for (int j = 0; j < rawToken.length; j++) {
+                  formatted.write(rawToken[j]);
+                  if ((j + 1) % 4 == 0 && (j + 1) % 20 != 0 && j != rawToken.length - 1) { formatted.write(" "); }
+                }
+                if (formatted.isNotEmpty) { tempTokens.add(TokenModel(text: formatted.toString())); }
+              }
+              setState(() { _tokenList = tempTokens; });
+              textRecognizer.close();
+            } catch (e) {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+            } finally {
+              setState(() { _isLoading = false; });
+            }
+          }
+
+          @override
+          Widget build(BuildContext context) {
+            return Scaffold(
+              appBar: AppBar(title: const Text('Prepaid Token Formatter'), centerTitle: true, backgroundColor: Colors.blueAccent),
+              body: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        ElevatedButton.icon(onPressed: () => _processImage(ImageSource.camera), icon: const Icon(Icons.camera_alt), label: const Text('ক্যামেরা')),
+                        ElevatedButton.icon(onPressed: () => _processImage(ImageSource.gallery), icon: const Icon(Icons.image), label: const Text('গ্যালারি')),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Expanded(
+                      child: _isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : _tokenList.isEmpty
+                              ? Container(
+                                  width: double.infinity,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(8), color: Colors.grey[100]),
+                                  child: const Text("টোকেনের ছবি তুলুন বা গ্যালারি থেকে সিলেক্ট করুন।", style: TextStyle(fontSize: 16, color: Colors.grey)),
+                                )
+                              : ListView.builder(
+                                  itemCount: _tokenList.length,
+                                  itemBuilder: (context, index) {
+                                    final token = _tokenList[index];
+                                    return Card(
+                                      color: token.isEntered ? Colors.grey[300] : Colors.white,
+                                      elevation: token.isEntered ? 0 : 3,
+                                      margin: const EdgeInsets.symmetric(vertical: 6),
+                                      child: ListTile(
+                                        leading: CircleAvatar(backgroundColor: token.isEntered ? Colors.grey : Colors.blueAccent, child: Text('${index + 1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                                        title: Text(token.text, style: TextStyle(fontSize: 18, fontFamily: 'monospace', fontWeight: FontWeight.bold, decoration: token.isEntered ? TextDecoration.lineThrough : TextDecoration.none, color: token.isEntered ? Colors.grey[600] : Colors.black)),
+                                        trailing: ElevatedButton(
+                                          onPressed: () { setState(() { token.isEntered = !token.isEntered; }); },
+                                          style: ElevatedButton.styleFrom(backgroundColor: token.isEntered ? Colors.blueGrey : Colors.green),
+                                          child: Text(token.isEntered ? 'Done' : 'Enter', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                    ),
+                    const SizedBox(height: 10),
+                    if (_tokenList.isNotEmpty && !_isLoading)
+                      ElevatedButton.icon(
+                        onPressed: () { String allText = _tokenList.map((t) => t.text).join("\n"); Clipboard.setData(ClipboardData(text: allText)); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('সব টোকেন কপি করা হয়েছে!'))); },
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, minimumSize: const Size(double.infinity, 50)),
+                        icon: const Icon(Icons.copy, color: Colors.white),
+                        label: const Text('সব টোকেন একসাথে কপি করুন', style: TextStyle(color: Colors.white, fontSize: 16)),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          }
+        }
+        EOF
+        
+        # অ্যান্ড্রয়েড ক্যামেরা পারমিশন ও SDK লেভেল আপডেট
         sed -i 's/minSdkVersion .*/minSdkVersion 21/' android/app/build.gradle
 
-    - name: Get Packages
+    - name: Install dependencies
       run: flutter pub get
 
-    - name: Build Release APK
-      run: flutter build apk --release --no-pub
+    - name: Build APK
+      run: flutter build apk --release
 
-    - name: Upload Artifact APK
+    - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: Token-Scanner-APK
